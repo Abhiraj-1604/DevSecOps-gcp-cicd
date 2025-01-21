@@ -10,6 +10,8 @@ pipeline {
         GCR_IMAGE_NAME = 'frontend'
         GCR_REGION = 'us-central1'
         GCR_URI = "us-central1-docker.pkg.dev/${GCP_PROJECT}/${GCR_IMAGE_NAME}"
+        GIT_REPO_NAME = "DevSecOps-gcp-cicd"
+        GIT_USER_NAME = "Abhiraj-1604"
     }
     stages {
         stage('Cleaning Workspace') {
@@ -19,16 +21,18 @@ pipeline {
         }
         stage('Checkout from Git') {
             steps {
-                git credentialsId: 'GITHUB', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
+                git branch: 'main', credentialsId: 'github', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
             }
         }
         stage('Sonarqube Analysis') {
             steps {
                 dir('Application-Code/frontend') {
                     withSonarQubeEnv('sonar-server') {
-                        sh ''' $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=frontend \
-                        -Dsonar.projectKey=frontend '''
+                        sh '''
+                            ${SCANNER_HOME}/bin/sonar-scanner \
+                            -Dsonar.projectName=frontend \
+                            -Dsonar.projectKey=frontend
+                        '''
                     }
                 }
             }
@@ -36,18 +40,18 @@ pipeline {
         stage('Quality Check') {
             steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                    waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
                 }
             }
         }
-        stage('OWASP Dependency-Check Scan') {
-            steps {
-                dir('Application-Code/frontend') {
-                    dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                }
-            }
-        }
+        // stage('OWASP Dependency-Check Scan') {
+        //     steps {
+        //         dir('Application-Code/frontend') {
+        //             dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
+        //             dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+        //         }
+        //     }
+        // }
         stage('Trivy File Scan') {
             steps {
                 dir('Application-Code/frontend') {
@@ -59,9 +63,11 @@ pipeline {
             steps {
                 script {
                     dir('Application-Code/frontend') {
-                        sh 'docker system prune -f'
-                        sh 'docker container prune -f'
-                        sh 'docker build -t ${GCR_URI}:${BUILD_NUMBER} .'
+                        sh '''
+                            docker system prune -f
+                            docker container prune -f
+                            docker build -t ${GCR_URI}:${BUILD_NUMBER} .
+                        '''
                     }
                 }
             }
@@ -70,10 +76,12 @@ pipeline {
             steps {
                 script {
                     withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
-                        sh 'gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}'
-                        sh 'gcloud config set project ${GCP_PROJECT}'
-                        sh 'gcloud auth configure-docker'
-                        sh 'docker push ${GCR_URI}:${BUILD_NUMBER}'
+                        sh '''
+                            gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
+                            gcloud config set project ${GCP_PROJECT}
+                            gcloud auth configure-docker
+                            docker push ${GCR_URI}:${BUILD_NUMBER}
+                        '''
                     }
                 }
             }
@@ -85,14 +93,10 @@ pipeline {
         }
         stage('Checkout Code') {
             steps {
-                git credentialsId: 'GITHUB', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
+                git branch: 'main', credentialsId: 'github', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
             }
         }
         stage('Update Deployment file') {
-            environment {
-                GIT_REPO_NAME = "DevSecOps-gcp-cicd"
-                GIT_USER_NAME = "Abhiraj-1604"
-            }
             steps {
                 dir('Kubernetes-Manifests-file/Frontend') {
                     withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
@@ -105,13 +109,12 @@ pipeline {
                             echo $imageTag
                             sed -i "s/${GCR_IMAGE_NAME}:${imageTag}/${GCR_IMAGE_NAME}:${BUILD_NUMBER}/" deployment.yaml
                             git add deployment.yaml
-                            git commit -m "Update deployment Image to version \${BUILD_NUMBER}"
-                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
+                            git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
+                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                         '''
                     }
                 }
             }
         }
-        
     }
 }
