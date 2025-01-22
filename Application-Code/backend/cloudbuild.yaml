@@ -1,8 +1,9 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/backend:$BUILD_ID', '.']
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:${_TAG}', '.']
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/backend:$BUILD_ID']
-
+    args: ['push', 'us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:${_TAG}']
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/backend:$BUILD_ID'
+  - 'us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:${_TAG}'
+substitutions:
+  _TAG: 'latest'
