@@ -5,6 +5,5 @@ steps:
     args: ['push', 'us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:${_TAG}']
 images:
   - 'us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:${_TAG}'
-substitutions:
-  _TAG: 'latest'
+
 
