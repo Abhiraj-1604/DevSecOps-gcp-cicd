@@ -25,7 +25,7 @@ spec:
       - name: ecr-registry-secret
       containers:
       - name: frontend
-        image: us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:60
+        image: us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend:61
         imagePullPolicy: Always
         env:
           - name: REACT_APP_BACKEND_URL
