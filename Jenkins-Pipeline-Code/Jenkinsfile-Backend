@@ -103,7 +103,7 @@ pipeline {
 
         stage('Update Deployment') {
             steps {
-                dir('Kubernetes-Manifests-file/backend') {
+                dir('Kubernetes-Manifests-file/Backend') {
                     withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                         sh '''
                             sed -i "s|us-central1-docker.pkg.dev/civic-gate-439511-j2/backend/backend:.*|${GCR_URI}:${BUILD_NUMBER}|g" deployment.yaml
