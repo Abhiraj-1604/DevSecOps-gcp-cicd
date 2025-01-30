@@ -25,7 +25,7 @@ spec:
       - name: gcr-registry-secret
       containers:
       - name: api
-        image: us-central1-docker.pkg.dev/civic-gate-439511-j2/backend:1
+        image: us-central1-docker.pkg.dev/civic-gate-439511-j2/backend/backend:0
         imagePullPolicy: Always
         env:
           - name: MONGO_CONN_STR
