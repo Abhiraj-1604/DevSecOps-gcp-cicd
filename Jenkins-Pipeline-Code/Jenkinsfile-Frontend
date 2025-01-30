@@ -7,51 +7,45 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         GOOGLE_CREDENTIALS = credentials('GCP_SERVICE_ACCOUNT_KEY')
         GCP_PROJECT = 'civic-gate-439511-j2'
-        GCR_IMAGE_NAME = 'frontend'
+        GCR_IMAGE_NAME = 'frontend'  // Repository name
         GCR_REGION = 'us-central1'
-        GCR_URI = "us-central1-docker.pkg.dev/${GCP_PROJECT}/${GCR_IMAGE_NAME}"
+        GCR_URI = "${GCR_REGION}-docker.pkg.dev/${GCP_PROJECT}/${GCR_IMAGE_NAME}/frontend" // Image name included
         GIT_REPO_NAME = "DevSecOps-gcp-cicd"
         GIT_USER_NAME = "Abhiraj-1604"
     }
     stages {
         stage('Cleaning Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
+
         stage('Checkout from Git') {
             steps {
-                git branch: 'main', credentialsId: 'github', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
+                git branch: 'main', 
+                credentialsId: 'github', 
+                url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
             }
         }
+
         stage('Sonarqube Analysis') {
             steps {
                 dir('Application-Code/frontend') {
                     withSonarQubeEnv('sonar-server') {
-                        sh '''
+                        sh """
                             ${SCANNER_HOME}/bin/sonar-scanner \
                             -Dsonar.projectName=frontend \
                             -Dsonar.projectKey=frontend
-                        '''
+                        """
                     }
                 }
             }
         }
+
         stage('Quality Check') {
             steps {
-                script {
-                    waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
-                }
+                waitForQualityGate abortPipeline: true
             }
         }
-        // stage('OWASP Dependency-Check Scan') {
-        //     steps {
-        //         dir('Application-Code/frontend') {
-        //             dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-        //             dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-        //         }
-        //     }
-        // }
+
         stage('Trivy File Scan') {
             steps {
                 dir('Application-Code/frontend') {
@@ -59,57 +53,53 @@ pipeline {
                 }
             }
         }
-        stage("Docker Image Build") {
-            steps {
-                script {
-                    dir('Application-Code/frontend') {
-                        sh '''
-                            docker system prune -f
-                            docker container prune -f
-                            docker build -t ${GCR_URI}:${BUILD_NUMBER} .
-                        '''
-                    }
-                }
-            }
-        }
-        stage("GCR Image Pushing") {
+
+        stage('Initialize gcloud and Docker') {
             steps {
                 script {
                     withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
                         sh '''
+                            # Install Docker Buildx
+                            mkdir -p ~/.docker/cli-plugins
+                            curl -SL https://github.com/docker/buildx/releases/download/v0.8.2/buildx-v0.8.2.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx
+                            chmod +x ~/.docker/cli-plugins/docker-buildx
+
+                            # Configure Docker and GCloud
                             gcloud auth activate-service-account --key-file=${GOOGLE_APPLICATION_CREDENTIALS}
                             gcloud config set project ${GCP_PROJECT}
-                            gcloud auth configure-docker
-                            docker push ${GCR_URI}:${BUILD_NUMBER}
+                            gcloud auth configure-docker ${GCR_REGION}-docker.pkg.dev
                         '''
                     }
                 }
             }
         }
-        stage("TRIVY Image Scan") {
+
+        stage('Build and Push Docker Image') {
+            steps {
+                script {
+                    withCredentials([file(credentialsId: 'GCP_SERVICE_ACCOUNT_KEY', variable: 'GOOGLE_APPLICATION_CREDENTIALS')]) {
+                        sh """
+                            docker buildx build --push -t ${GCR_URI}:${BUILD_NUMBER} Application-Code/frontend
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('TRIVY Image Scan') {
             steps {
                 sh 'trivy image ${GCR_URI}:${BUILD_NUMBER} > trivyimage.txt'
             }
         }
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', credentialsId: 'github', url: 'https://github.com/Abhiraj-1604/DevSecOps-gcp-cicd.git'
-            }
-        }
-        stage('Update Deployment file') {
+
+        stage('Update Deployment') {
             steps {
                 dir('Kubernetes-Manifests-file/Frontend') {
                     withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                         sh '''
-                            git config user.email "abhirajrode2004@gmail.com"
-                            git config user.name "Abhiraj-1604"
-                            BUILD_NUMBER=${BUILD_NUMBER}
-                            echo $BUILD_NUMBER
-                            imageTag=$(grep -oP '(?<=frontend:)[^ ]+' deployment.yaml)
-                            echo $imageTag
-                            sed -i "s/${GCR_IMAGE_NAME}:${imageTag}/${GCR_IMAGE_NAME}:${BUILD_NUMBER}/" deployment.yaml
+                            sed -i "s|us-central1-docker.pkg.dev/civic-gate-439511-j2/frontend/frontend:.*|${GCR_URI}:${BUILD_NUMBER}|g" deployment.yaml
                             git add deployment.yaml
-                            git commit -m "Update deployment Image to version ${BUILD_NUMBER}"
+                            git commit -m "Update image to ${BUILD_NUMBER}"
                             git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
                         '''
                     }
